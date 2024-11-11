@@ -18,13 +18,42 @@ This project tests blockchain transaction throughput (TPS) by sending multiple c
 
 ## Usage
 
-### Generate account
+### Local
+
+
+#### Environment
+
+```bash
+cp .env.example .env
+```
+
+#### Generate account
+
+```bash
+go run cmd/generate_account/main.go
+```
+
+#### Send EOA tx
+
+```bash
+go run cmd/send_eoa_tx/main.go
+```
+
+### Docker
+
+#### Environment
+
+```bash
+cp .env.example .env.docker
+```
+
+#### Generate account
 
 ```bash
 docker-compose up generate-account --build
 ```
 
-### Send EOA tx
+#### Send EOA tx
 
 ```bash
 docker-compose up send-eoa-tx --build
