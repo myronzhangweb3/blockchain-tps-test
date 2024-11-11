@@ -1,19 +1,31 @@
-# Batch send tx
+# BlockChain TPS Test
 
-## Description
+This project tests blockchain transaction throughput (TPS) by sending multiple concurrent transactions from different accounts.
 
-for press text
+## Test Principles
+
+1. Account Generation
+   - The system first generates multiple test accounts using `generate-account`
+   
+2. Transaction Testing
+   - Each account is funded with a minimum balance (0.01 ETH) from a main account
+   - The main account's private key is configured in `.env`
+   - Multiple worker goroutines (default 30) send transactions concurrently
+   - Each worker processes a configured number of transactions (default 10)
+   - Transactions are simple ETH transfers between accounts
+   - Gas price is calculated dynamically with a configurable multiplier
+   - System monitors and replenishes gas fees when account balance is low
 
 ## Usage
 
 ### Generate account
 
 ```bash
-go run evm/batch_send_tx/generate_account/main.go
+docker-compose up generate-account --build
 ```
 
-### Send tx
+### Send EOA tx
 
 ```bash
-go run evm/batch_send_tx/main.go -rpc=https://testnet-rpc.orangechain.xyz --key=a6eda2bf70a81f0cc6a1fd6b0241ae1fbe6b13fda0270227e162b47aefc7d757 --n=1 --pr=100
+docker-compose up send-eoa-tx --build
 ```

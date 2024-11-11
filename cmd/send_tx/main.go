@@ -23,22 +23,18 @@ import (
 )
 
 const (
-	pksPath = "generate_account/pks.txt"
+	pksPath = "pks/pks.txt"
 )
 
 var ethRpcUrl, mainAccountPrivateKey string
 var numTxsPerWorker uint64
 var gasPriceRate uint64
 var repayGasFee, minGasFee *big.Int
+var err error
 
 func main() {
-	// 加载.env文件
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Error loading .env file: %v", err)
-	}
+	_ = godotenv.Load()
 
-	// 从环境变量读取配置
 	ethRpcUrl = os.Getenv("ETH_RPC_URL")
 	if ethRpcUrl == "" {
 		log.Fatal("ETH_RPC_URL environment variable is required")
@@ -60,7 +56,7 @@ func main() {
 
 	gasPriceRateStr := os.Getenv("GAS_PRICE_RATE")
 	if gasPriceRateStr == "" {
-		gasPriceRate = 100 // 默认值
+		gasPriceRate = 100
 	} else {
 		gasPriceRate, err = strconv.ParseUint(gasPriceRateStr, 10, 64)
 		if err != nil {
@@ -89,7 +85,6 @@ func main() {
 		log.Fatalf("Failed to connect to the Ethereum client: %v", err)
 	}
 
-	// 签署交易。这需要链ID，对于主网是1。
 	chainId, err := client.ChainID(context.Background())
 	if err != nil {
 		log.Fatalf("error getting chain ID: %s", err)
@@ -102,7 +97,7 @@ func main() {
 	gasPrice = gasPrice.Mul(gasPrice, big.NewInt(int64(gasPriceRate)))
 	gasPrice = gasPrice.Div(gasPrice, big.NewInt(100))
 
-	// 加载主账户
+	// Load main account
 	mainAccountKey, err := crypto.HexToECDSA(mainAccountPrivateKey)
 	if err != nil {
 		log.Fatalf("Invalid main workerAccount private key: %v", err)
@@ -110,7 +105,7 @@ func main() {
 	mainAccountAddress := crypto.PubkeyToAddress(mainAccountKey.PublicKey)
 	log.Printf("mainAccountAddress: %s\n", mainAccountAddress)
 
-	// 加载工作账户
+	// Load work account
 	workerAccounts, err := loadWorkers(pksPath)
 	if err != nil {
 		log.Fatalf("Failed to generate worker accounts: %v", err)
@@ -118,13 +113,13 @@ func main() {
 
 	for {
 		fmt.Println("---------------- next loop ----------------\b")
-		// 发送ETH
-		prepayGasFee2(chainId, workerAccounts, client, gasPrice, mainAccountAddress.String())
+		// send gas fee
+		prepayGasFee(chainId, workerAccounts, client, gasPrice, mainAccountAddress.String())
 
-		// 构建模拟交易
+		// Build simulated trading.
 		rawTxList := buildTestTx(chainId, workerAccounts, client, mainAccountAddress, gasPrice)
 
-		// 广播交易
+		// Broadcast trading
 		broadcastTransactions(client.Client(), rawTxList)
 
 		time.Sleep(10 * time.Second)
@@ -132,34 +127,7 @@ func main() {
 }
 
 func prepayGasFee(chainID *big.Int, workerAccounts []models.Account, client *ethclient.Client, gasPrice *big.Int, mainAccountAddress string) {
-	mainAccountNonce, err := client.NonceAt(context.Background(), common.HexToAddress(mainAccountAddress), nil)
-	if err != nil {
-		log.Fatalf("Failed to get mainAccountNonce: %v", err)
-	}
-
-	wg := sync.WaitGroup{}
-	for i, workerAccount := range workerAccounts {
-		wg.Add(1)
-		go func(i int, nonce *big.Int, workerAccount string) {
-			defer wg.Done()
-			// 如果余额足够不再发送
-			balance, err := client.BalanceAt(context.Background(), common.HexToAddress(workerAccount), nil)
-			if balance.Cmp(minGasFee) >= 0 {
-				return
-			}
-			// 从主账户向工作账户发送ETH
-			_, _, err = buildEthTx(ethRpcUrl, mainAccountPrivateKey, chainID, nonce, workerAccount, repayGasFee, big.NewInt(21000), gasPrice, true, false, nil)
-			if err != nil {
-				log.Printf("Failed to send ETH to worker %d: %v. from: %s, nonce: %d", i, err, workerAccount, nonce)
-			}
-			log.Printf("Sent ETH to worker %d\n", i)
-		}(i, big.NewInt(int64(mainAccountNonce+uint64(i))), workerAccount.Address.String())
-	}
-	wg.Wait()
-}
-
-func prepayGasFee2(chainID *big.Int, workerAccounts []models.Account, client *ethclient.Client, gasPrice *big.Int, mainAccountAddress string) {
-	log.Printf("---------------- prepayGasFee2 ----------------\b")
+	log.Printf("---------------- prepayGasFee ----------------\b")
 
 	wg := sync.WaitGroup{}
 	mainAccountNonce, err := client.NonceAt(context.Background(), common.HexToAddress(mainAccountAddress), nil)
@@ -173,12 +141,16 @@ func prepayGasFee2(chainID *big.Int, workerAccounts []models.Account, client *et
 		if i%100 == 0 {
 			fmt.Println("checking worker", i)
 		}
-		// 如果余额足够不再发送
+		// If the balance is enough, don't send it anymore.
 		balance, err := client.BalanceAt(context.Background(), workerAccount.Address, nil)
+		if err != nil {
+			log.Println(fmt.Sprintf("BalanceAt erro: %v", err))
+			continue
+		}
 		if balance.Cmp(minGasFee) >= 0 {
 			continue
 		}
-		// 从主账户向工作账户发送ETH
+		// Send ETH from the main account to the work account
 		wg.Add(1)
 		_, _, err = buildEthTx(ethRpcUrl, mainAccountPrivateKey, chainID, nonce, workerAccount.Address.String(), repayGasFee, big.NewInt(21000), gasPrice, true, true, &wg)
 		if err != nil {
@@ -237,7 +209,6 @@ func buildTestTx(chainID *big.Int, workerAccounts []models.Account, client *ethc
 	}
 	workerWg.Wait()
 	numTxsWg.Wait()
-	// 遍历所有键值对
 	rawTxMap.Range(func(key, value interface{}) bool {
 		rawTxList = append(rawTxList, value.(models.Tx))
 		return true
@@ -276,7 +247,7 @@ func broadcastTransactions(client *rpc.Client, workerAddresses []models.Tx) {
 		go func(workerIndex int) {
 			defer wg.Done()
 
-			// 构建和广播交易
+			// broadcast transactions.
 			err := client.CallContext(context.Background(), nil, "eth_sendRawTransaction", "0x"+workerAddresses[workerIndex].RawTxHex)
 			if err != nil {
 				log.Printf("Failed to broadcast transaction %v: %v", workerAddresses[workerIndex], err)
@@ -297,18 +268,14 @@ func buildEthTx(ethRpcUrl, privateKeyHex string, chainId, nonce *big.Int, toAddr
 
 	ethClient := ethclient.NewClient(client)
 
-	// 私钥，用于签署交易
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return "", "", fmt.Errorf("error converting private key: %s", err)
 	}
 
-	// 设置接收者的地址
 	toAddress := common.HexToAddress(toAddressHex)
 
-	// 设置数据字段，如果是标准的ETH转账，这通常是空的。
 	var data []byte
-	// 创建一个未签名的交易。
 	tx := types.NewTx(&types.LegacyTx{
 		Nonce:    nonce.Uint64(),
 		To:       &toAddress,
@@ -323,13 +290,11 @@ func buildEthTx(ethRpcUrl, privateKeyHex string, chainId, nonce *big.Int, toAddr
 		return "", "", fmt.Errorf("error signing transaction: %s", err)
 	}
 
-	// 对交易进行RLP编码，以便可以将其广播到以太坊网络。
 	encodedTx, err := rlp.EncodeToBytes(signedTx)
 	if err != nil {
 		return "", "", fmt.Errorf("error encoding transaction: %s", err)
 	}
 
-	// 将RLP编码的交易转换为十六进制字符串
 	txDataHex := common.Bytes2Hex(encodedTx)
 
 	if send {
@@ -342,13 +307,13 @@ func buildEthTx(ethRpcUrl, privateKeyHex string, chainId, nonce *big.Int, toAddr
 			go func(txDataHex string, txHash common.Hash, wg *sync.WaitGroup) {
 				for {
 					time.Sleep(2 * time.Second)
-					// 补偿广播
+					// rebroadcast
 					err = client.CallContext(context.Background(), nil, "eth_sendRawTransaction", "0x"+txDataHex)
 					if err != nil && !strings.Contains(err.Error(), "already known") && !strings.Contains(err.Error(), "nonce too low") {
 						log.Printf("Failed to broadcast transaction: %v", err)
 						continue
 					}
-					// 判断是否上链
+					// check on the chain
 					_, pending, err := ethClient.TransactionByHash(context.Background(), txHash)
 					if err != nil {
 						log.Printf("Failed to get transaction by hash: %v", err)

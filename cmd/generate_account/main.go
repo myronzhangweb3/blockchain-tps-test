@@ -13,17 +13,12 @@ import (
 )
 
 const (
-	pksPath = "generate_account/pks.txt"
+	pksPath = "pks/pks.txt"
 )
 
 func main() {
-	// 加载.env文件
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Error loading .env file: %v", err)
-	}
+	_ = godotenv.Load()
 
-	// 从环境变量读取工作账户数量
 	numWorkersStr := os.Getenv("NUM_WORKERS")
 	if numWorkersStr == "" {
 		log.Fatal("NUM_WORKERS environment variable is required")
@@ -55,9 +50,7 @@ func generateWorkers(numWorkers int) (accounts []models.Account, err error) {
 			return nil, fmt.Errorf("failed to generate private key: %v", err)
 		}
 
-		// 从私钥中获取公钥，然后从公钥中获取地址
 		address := crypto.PubkeyToAddress(privateKey.PublicKey)
-		// 将私钥转换为字符串形式
 		privateKeyBytes := crypto.FromECDSA(privateKey)
 		privateKeyHex := fmt.Sprintf("%x", privateKeyBytes)
 
