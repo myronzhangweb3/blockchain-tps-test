@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  init:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - .env.docker
+    volumes:
+#      - ./sql/local:/root/sql
+      - ./sql/testnet:/root/sql
+    command: [ "./init" ]
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.docker
+    command: [ "./api" ]
+  sync:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "8001:8000"
+    command: [ "./syncer" ]
+  propose:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - .env.docker
+    ports:
+      - "8002:8000"
+    command: [ "./proposer" ]
