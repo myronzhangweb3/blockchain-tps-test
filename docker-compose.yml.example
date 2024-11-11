@@ -1,40 +1,23 @@
 version: '3.8'
 
 services:
-  init:
+  generate-account:
+    container_name: generate-account
     build:
       context: .
-      dockerfile: deploy/Dockerfile
+      dockerfile: Dockerfile
     env_file:
       - .env.docker
     volumes:
-#      - ./sql/local:/root/sql
-      - ./sql/testnet:/root/sql
-    command: [ "./init" ]
-  api:
+      - ./pks:/root/pks
+    command: [ "/root/generate_account" ]
+  send-eoa-tx:
+    container_name: send-eoa-tx
     build:
       context: .
-      dockerfile: deploy/Dockerfile
-    ports:
-      - "8000:8000"
+      dockerfile: Dockerfile
     env_file:
       - .env.docker
-    command: [ "./api" ]
-  sync:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
-    env_file:
-      - .env.docker
-    ports:
-      - "8001:8000"
-    command: [ "./syncer" ]
-  propose:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
-    env_file:
-      - .env.docker
-    ports:
-      - "8002:8000"
-    command: [ "./proposer" ]
+    volumes:
+      - ./pks:/root/pks
+    command: [ "/root/send_tx" ]

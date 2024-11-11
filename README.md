@@ -45,6 +45,7 @@ go run cmd/send_eoa_tx/main.go
 
 ```bash
 cp .env.example .env.docker
+cp docker-compose.yml.example docker-compose.yml
 ```
 
 #### Generate account
